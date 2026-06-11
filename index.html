@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrossDrop - P2P File Transfer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <div id="app-container">
+        <header>
+            <h1>CrossDrop</h1>
+            <p>Peer-to-Peer File Transfer</p>
+        </header>
+
+        <main>
+            <!-- ── SENDER PANEL ──────────────────────────────────── -->
+            <section id="sender-section">
+                <h2>Send a File</h2>
+
+                <!-- Step 1: Generate room code -->
+                <button id="generate-code-btn">Generate Room Code</button>
+
+                <!-- Code display row: big code + copy button -->
+                <div id="code-row" class="hidden">
+                    <div id="room-code-display" class="large-code"></div>
+                    <button id="copy-code-btn" class="icon-btn" title="Copy code">
+                        <svg id="copy-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        <svg id="check-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                </div>
+
+                <div id="qrcode"></div>
+
+                <!-- Waiting indicator -->
+                <p id="waiting-msg" class="status-msg hidden">⏳ Waiting for peer to join…</p>
+
+                <!-- Connection error -->
+                <p id="sender-error-msg" class="error-msg hidden"></p>
+
+                <!-- Step 2: File picker — revealed once DataChannel opens -->
+                <div id="file-picker-area" class="hidden">
+                    <p class="status-msg">✅ Peer connected! Choose a file to send.</p>
+                    <label id="file-drop-zone" for="file-input">
+                        <span class="drop-icon">📂</span>
+                        <span class="drop-label">Drop file here or click to browse</span>
+                        <input type="file" id="file-input">
+                    </label>
+                    <div id="sender-file-info" class="file-info hidden"></div>
+                    <button id="send-file-btn" class="hidden">Send File</button>
+                    <div id="sender-progress-wrap" class="progress-wrap hidden">
+                        <div class="progress-label">
+                            <span id="sender-progress-text">Sending…</span>
+                            <span id="sender-progress-pct">0%</span>
+                        </div>
+                        <div class="progress-bar-track">
+                            <div id="sender-progress-bar" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+                    <!-- Send another file -->
+                    <button id="send-another-btn" class="secondary-btn hidden">Send Another File</button>
+                </div>
+            </section>
+
+            <!-- ── RECEIVER PANEL ────────────────────────────────── -->
+            <section id="receiver-section">
+                <h2>Receive a File</h2>
+
+                <!-- Step 1: Enter room code -->
+                <div id="join-area">
+                    <input type="text" id="room-code-input"
+                           placeholder="Enter 6-character code"
+                           maxlength="6"
+                           autocomplete="off"
+                           spellcheck="false">
+                    <button id="join-room-btn">Join Room</button>
+                </div>
+
+                <!-- Connection error / expired -->
+                <p id="receiver-error-msg" class="error-msg hidden"></p>
+
+                <!-- Step 2: Waiting / receiving state -->
+                <div id="receiver-status-area" class="hidden">
+                    <p id="receiver-status-msg" class="status-msg">⏳ Waiting for sender to send a file…</p>
+                    <div id="receiver-progress-wrap" class="progress-wrap hidden">
+                        <div class="progress-label">
+                            <span id="receiver-progress-text">Receiving…</span>
+                            <span id="receiver-progress-pct">0%</span>
+                        </div>
+                        <div class="progress-bar-track">
+                            <div id="receiver-progress-bar" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+                    <div id="download-area" class="hidden">
+                        <a id="download-link" class="download-btn">⬇ Download File</a>
+                    </div>
+                    <!-- Start over -->
+                    <button id="start-over-btn" class="secondary-btn hidden">Start Over</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Privacy note -->
+        <footer>
+            <p>🔒 Files transfer directly between devices. Nothing is stored on any server.</p>
+        </footer>
+    </div>
+
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,387 @@
+/* 
+ * CrossDrop Stylesheet
+ */
+
+/* ─── Variables ──────────────────────────────────────────── */
+:root {
+    --clr-bg:          #0f1117;
+    --clr-surface:     #1a1d27;
+    --clr-surface-2:   #22263a;
+    --clr-accent:      #6c63ff;
+    --clr-accent-glow: rgba(108, 99, 255, 0.35);
+    --clr-success:     #34d399;
+    --clr-error:       #f87171;
+    --clr-text:        #e2e8f0;
+    --clr-muted:       #8892a4;
+    --clr-border:      rgba(255,255,255,0.08);
+    --radius:          14px;
+    --radius-sm:       8px;
+    --shadow:          0 8px 32px rgba(0,0,0,0.4);
+    --transition:      0.2s ease;
+    --font:            'Inter', system-ui, sans-serif;
+}
+
+/* ─── Reset & Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; }
+
+body {
+    font-family: var(--font);
+    background: var(--clr-bg);
+    color: var(--clr-text);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px 60px;
+    background-image:
+        radial-gradient(ellipse at 20% 10%, rgba(108,99,255,0.12) 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 80%, rgba(52,211,153,0.07) 0%, transparent 55%);
+}
+
+/* ─── App Container ──────────────────────────────────────── */
+#app-container {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+header {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+header h1 {
+    font-size: 2.8rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 50%, #34d399 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+header p {
+    color: var(--clr-muted);
+    margin-top: 6px;
+    font-size: 1rem;
+}
+
+/* ─── Footer ─────────────────────────────────────────────── */
+footer {
+    text-align: center;
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--clr-border);
+}
+
+footer p {
+    color: var(--clr-muted);
+    font-size: 0.82rem;
+    letter-spacing: 0.01em;
+}
+
+/* ─── Main Grid ─────────────────────────────────────────── */
+main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 640px) {
+    main { grid-template-columns: 1fr; }
+}
+
+/* ─── Section Cards ──────────────────────────────────────── */
+section {
+    background: var(--clr-surface);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    box-shadow: var(--shadow);
+}
+
+section h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--clr-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    align-self: flex-start;
+}
+
+/* ─── Buttons ────────────────────────────────────────────── */
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 12px 24px;
+    transition: opacity var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+button:active { transform: scale(0.97); }
+
+#generate-code-btn,
+#join-room-btn,
+#send-file-btn {
+    background: var(--clr-accent);
+    color: #fff;
+    width: 100%;
+    box-shadow: 0 0 0 0 var(--clr-accent-glow);
+}
+
+#generate-code-btn:hover,
+#join-room-btn:hover,
+#send-file-btn:hover {
+    opacity: 0.9;
+    box-shadow: 0 0 18px 4px var(--clr-accent-glow);
+}
+
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+/* ─── Secondary / Reset Button ───────────────────────────── */
+.secondary-btn {
+    background: var(--clr-surface-2);
+    color: var(--clr-muted);
+    width: 100%;
+    border: 1px solid var(--clr-border);
+    font-size: 0.88rem;
+}
+
+.secondary-btn:hover {
+    color: var(--clr-text);
+    border-color: var(--clr-accent);
+}
+
+/* ─── Icon Button (copy) ─────────────────────────────────── */
+.icon-btn {
+    background: var(--clr-surface-2);
+    color: var(--clr-muted);
+    border: 1px solid var(--clr-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.icon-btn:hover {
+    color: var(--clr-text);
+    border-color: var(--clr-accent);
+    background: rgba(108,99,255,0.1);
+}
+
+.icon-btn.copied {
+    color: var(--clr-success);
+    border-color: var(--clr-success);
+}
+
+/* ─── Code Row ───────────────────────────────────────────── */
+#code-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+/* ─── Large Room Code ─────────────────────────────────────── */
+.large-code {
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: 0.22em;
+    font-family: 'Courier New', monospace;
+    color: var(--clr-text);
+    text-align: center;
+    line-height: 1;
+}
+
+/* ─── QR Code ─────────────────────────────────────────────── */
+#qrcode {
+    background: #fff;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    display: inline-block;
+}
+#qrcode:empty { display: none; }
+
+/* ─── Error / Status Messages ────────────────────────────── */
+.status-msg {
+    font-size: 0.9rem;
+    color: var(--clr-muted);
+    text-align: center;
+    width: 100%;
+}
+
+.error-msg {
+    font-size: 0.88rem;
+    color: var(--clr-error);
+    background: rgba(248, 113, 113, 0.08);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    text-align: center;
+    width: 100%;
+    line-height: 1.5;
+}
+
+/* ─── Text Input ─────────────────────────────────────────── */
+#join-area {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#room-code-input {
+    width: 100%;
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--clr-border);
+    background: var(--clr-surface-2);
+    color: var(--clr-text);
+    font-size: 1.4rem;
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+#room-code-input:focus {
+    border-color: var(--clr-accent);
+    box-shadow: 0 0 0 3px var(--clr-accent-glow);
+}
+
+/* ─── File Drop Zone ─────────────────────────────────────── */
+#file-picker-area {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+#file-drop-zone {
+    width: 100%;
+    border: 2px dashed var(--clr-border);
+    border-radius: var(--radius);
+    padding: 36px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+    text-align: center;
+}
+
+#file-drop-zone:hover,
+#file-drop-zone.drag-over {
+    border-color: var(--clr-accent);
+    background: rgba(108,99,255,0.06);
+}
+
+#file-drop-zone input[type="file"] { display: none; }
+
+.drop-icon  { font-size: 2.2rem; }
+.drop-label { color: var(--clr-muted); font-size: 0.9rem; }
+
+/* ─── File Info ──────────────────────────────────────────── */
+.file-info {
+    width: 100%;
+    background: var(--clr-surface-2);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: var(--clr-muted);
+    word-break: break-all;
+    line-height: 1.6;
+}
+.file-info strong { color: var(--clr-text); }
+
+/* ─── Progress Bar ───────────────────────────────────────── */
+.progress-wrap {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--clr-muted);
+}
+
+.progress-bar-track {
+    width: 100%;
+    height: 8px;
+    background: var(--clr-surface-2);
+    border-radius: 99px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--clr-accent) 0%, var(--clr-success) 100%);
+    transition: width 0.1s linear;
+}
+
+/* ─── Download Button ─────────────────────────────────────── */
+#download-area {
+    width: 100%;
+    text-align: center;
+}
+
+.download-btn {
+    display: inline-block;
+    background: var(--clr-success);
+    color: #0f1117;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 13px 28px;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity var(--transition), transform var(--transition);
+}
+
+.download-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* ─── Receiver status area ───────────────────────────────── */
+#receiver-status-area {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+/* ─── Utilities ──────────────────────────────────────────── */
+.hidden { display: none !important; }
