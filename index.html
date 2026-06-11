@@ -36,11 +36,18 @@
                 <!-- Waiting indicator -->
                 <p id="waiting-msg" class="status-msg hidden">⏳ Waiting for peer to join…</p>
 
+                <!-- Still-waiting animated nudge — shown after 15 s -->
+                <div id="still-waiting-indicator" class="still-waiting hidden">
+                    <span class="pulse-dot"></span>
+                    <span id="still-waiting-text">Still here — your room is active for up to 10 minutes</span>
+                </div>
+
                 <!-- Connection error -->
                 <p id="sender-error-msg" class="error-msg hidden"></p>
 
                 <!-- Step 2: File picker — revealed once DataChannel opens -->
                 <div id="file-picker-area" class="hidden">
+                    <button id="sender-leave-btn" class="leave-btn secondary-btn hidden">🚪 Leave Room</button>
                     <p class="status-msg">✅ Peer connected! Choose a file to send.</p>
                     <label id="file-drop-zone" for="file-input">
                         <span class="drop-icon">📂</span>
@@ -60,6 +67,18 @@
                     </div>
                     <!-- Send another file -->
                     <button id="send-another-btn" class="secondary-btn hidden">Send Another File</button>
+
+                    <!-- ── Chat (sender) ──────────────────────────────── -->
+                    <div id="sender-chat-area" class="chat-area hidden">
+                        <p class="chat-label">💬 Chat</p>
+                        <div id="sender-chat-log" class="chat-log" aria-live="polite" aria-label="Chat messages"></div>
+                        <div class="chat-input-row">
+                            <textarea id="sender-chat-input" class="chat-textarea"
+                                      placeholder="Message… (Enter to send, Shift+Enter for new line)"
+                                      rows="2"></textarea>
+                            <button id="sender-send-text-btn" class="send-text-btn">Send</button>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -83,6 +102,7 @@
                 <!-- Step 2: Waiting / receiving state -->
                 <div id="receiver-status-area" class="hidden">
                     <p id="receiver-status-msg" class="status-msg">⏳ Waiting for sender to send a file…</p>
+                    <button id="receiver-leave-btn" class="leave-btn secondary-btn hidden">🚪 Leave Room</button>
                     <div id="receiver-progress-wrap" class="progress-wrap hidden">
                         <div class="progress-label">
                             <span id="receiver-progress-text">Receiving…</span>
@@ -96,6 +116,18 @@
                         <a id="download-link" class="download-btn">⬇ Download File</a>
                     </div>
                     <!-- Start over -->
+                    <!-- ── Chat (receiver) ──────────────────────────── -->
+                    <div id="receiver-chat-area" class="chat-area hidden">
+                        <p class="chat-label">💬 Chat</p>
+                        <div id="receiver-chat-log" class="chat-log" aria-live="polite" aria-label="Chat messages"></div>
+                        <div class="chat-input-row">
+                            <textarea id="receiver-chat-input" class="chat-textarea"
+                                      placeholder="Message… (Enter to send, Shift+Enter for new line)"
+                                      rows="2"></textarea>
+                            <button id="receiver-send-text-btn" class="send-text-btn">Send</button>
+                        </div>
+                    </div>
+
                     <button id="start-over-btn" class="secondary-btn hidden">Start Over</button>
                 </div>
             </section>

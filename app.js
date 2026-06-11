@@ -15,6 +15,7 @@ import {
     onValue,
     onChildAdded,
     off,
+    onDisconnect,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 
 // ─────────────────────────────────────────────
@@ -32,8 +33,9 @@ const STUN_SERVERS = {
 const CODE_CHARS         = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const CHUNK_SIZE         = 16 * 1024;    // 16 KB per chunk
 const BUFFER_THRESHOLD   = 256 * 1024;  // Back-pressure threshold (256 KB)
-const ROOM_TTL_MS        = 10 * 60 * 1000; // 10 minutes in milliseconds
-const CONNECTION_TIMEOUT = 30 * 1000;   // 30 seconds
+const ROOM_TTL_MS           = 10 * 60 * 1000; // 10 minutes in milliseconds
+const STILL_WAITING_TIMEOUT = 15 * 1000;       // 15 s — show animated nudge on sender side
+const CONNECTION_TIMEOUT    = 30 * 1000;       // 30 s — soft warning (sender) / hard kill (receiver)
 
 // ─────────────────────────────────────────────
 // DOM ELEMENTS
@@ -47,8 +49,10 @@ const copyCodeBtn        = document.getElementById('copy-code-btn');
 const copyIcon           = document.getElementById('copy-icon');
 const checkIcon          = document.getElementById('check-icon');
 const qrCodeContainer    = document.getElementById('qrcode');
-const waitingMsg         = document.getElementById('waiting-msg');
-const senderErrorMsg     = document.getElementById('sender-error-msg');
+const waitingMsg              = document.getElementById('waiting-msg');
+const stillWaitingIndicator   = document.getElementById('still-waiting-indicator');
+const stillWaitingText        = document.getElementById('still-waiting-text');
+const senderErrorMsg          = document.getElementById('sender-error-msg');
 const filePickerArea     = document.getElementById('file-picker-area');
 const fileDropZone       = document.getElementById('file-drop-zone');
 const fileInput          = document.getElementById('file-input');
@@ -73,6 +77,22 @@ const downloadArea         = document.getElementById('download-area');
 const downloadLink         = document.getElementById('download-link');
 const startOverBtn         = document.getElementById('start-over-btn');
 
+// Chat — sender
+const senderChatArea      = document.getElementById('sender-chat-area');
+const senderChatLog       = document.getElementById('sender-chat-log');
+const senderChatInput     = document.getElementById('sender-chat-input');
+const senderSendTextBtn   = document.getElementById('sender-send-text-btn');
+
+// Chat — receiver
+const receiverChatArea    = document.getElementById('receiver-chat-area');
+const receiverChatLog     = document.getElementById('receiver-chat-log');
+const receiverChatInput   = document.getElementById('receiver-chat-input');
+const receiverSendTextBtn = document.getElementById('receiver-send-text-btn');
+
+// Leave Room buttons
+const senderLeaveBtn   = document.getElementById('sender-leave-btn');
+const receiverLeaveBtn = document.getElementById('receiver-leave-btn');
+
 // ─────────────────────────────────────────────
 // APPLICATION STATE
 // ─────────────────────────────────────────────
@@ -82,7 +102,8 @@ let peerConnection     = null;
 let dataChannel        = null;
 let role               = null;   // 'sender' | 'receiver'
 let selectedFile       = null;
-let connectionTimer    = null;   // setTimeout handle for 30s connection timeout
+let connectionTimer    = null;   // setTimeout handle for 30 s hard/soft timeout
+let stillWaitingTimer  = null;   // setTimeout handle for 15 s animated nudge (sender only)
 
 // Receiver reassembly state
 const rx = {
@@ -159,35 +180,118 @@ copyCodeBtn.addEventListener('click', () => {
 });
 
 // ─────────────────────────────────────────────
-// CONNECTION TIMEOUT (30 seconds)
+// UTILITIES — Chat
 // ─────────────────────────────────────────────
 
+/** Escapes user-supplied text before injecting it as innerHTML. */
+function escapeHtml(str) {
+    return str
+        .replace(/&/g,  '&amp;')
+        .replace(/</g,  '&lt;')
+        .replace(/>/g,  '&gt;')
+        .replace(/"/g,  '&quot;');
+}
+
+/** Returns the chat log + input elements for the current role. */
+function activeChatEls() {
+    return role === 'sender'
+        ? { log: senderChatLog,   input: senderChatInput }
+        : { log: receiverChatLog, input: receiverChatInput };
+}
+
+/**
+ * Appends a single chat message to the active role's log.
+ * @param {'you'|'them'} who
+ * @param {string}       content
+ */
+function appendChatMessage(who, content) {
+    const { log } = activeChatEls();
+    const time    = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const el      = document.createElement('div');
+    el.className  = `chat-message ${who}`;
+    el.innerHTML  =
+        `<span class="chat-meta">${who === 'you' ? 'You' : 'Them'} · ${time}</span>` +
+        `<span class="chat-bubble">${escapeHtml(content)}</span>`;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+}
+
+/**
+ * Reads the active role's textarea, sends a { type:'text' } message over the
+ * DataChannel, echoes it locally as "You", then clears the input.
+ */
+function sendTextMessage() {
+    const { input } = activeChatEls();
+    const content   = input.value.trim();
+    if (!content || !dataChannel || dataChannel.readyState !== 'open') return;
+    dataChannel.send(JSON.stringify({ type: 'text', content }));
+    appendChatMessage('you', content);
+    input.value = '';
+    input.focus();
+}
+
+// ─────────────────────────────────────────────
+// CONNECTION TIMERS
+// ─────────────────────────────────────────────
+
+/**
+ * Starts two timers:
+ *
+ * • 15 s (sender only) — reveals the animated “still waiting” indicator so
+ *   the sender knows the app is alive and the room is still open.
+ *
+ * • 30 s — behaviour differs by role:
+ *   - Sender: soft nudge only (no cleanup). The Firebase listeners and WebRTC
+ *     handshake stay alive so a late-joining receiver can still connect.
+ *   - Receiver: hard failure (calls cleanup). At this point the STUN handshake
+ *     has genuinely failed; keeping the connection attempt open is useless.
+ */
 function startConnectionTimer() {
     clearConnectionTimer();
+
+    // ── 15 s: animated indicator (sender only) ──────────────────────────
+    stillWaitingTimer = setTimeout(() => {
+        if (role === 'sender' && (!dataChannel || dataChannel.readyState !== 'open')) {
+            stillWaitingIndicator.classList.remove('hidden');
+        }
+    }, STILL_WAITING_TIMEOUT);
+
+    // ── 30 s: soft nudge for sender / hard kill for receiver ────────────
     connectionTimer = setTimeout(() => {
-        // Only fire if we haven't connected yet
         if (!dataChannel || dataChannel.readyState !== 'open') {
-            const errorEl  = role === 'sender' ? senderErrorMsg : receiverErrorMsg;
-            const buttonEl = role === 'sender' ? generateCodeBtn : joinRoomBtn;
-            showError(errorEl, '⚠️ Could not connect. You may be on a restricted network.');
             if (role === 'sender') {
-                waitingMsg.classList.add('hidden');
-                generateCodeBtn.disabled    = false;
-                generateCodeBtn.textContent = 'Generate Room Code';
+                // Soft nudge only — do NOT call cleanup().
+                // Firebase listeners and the RTCPeerConnection stay alive;
+                // a receiver who joins now will still be able to connect.
+                waitingMsg.textContent = '⏳ Still waiting… Your room stays open for up to 10 minutes.';
+                stillWaitingText.textContent = 'The room is still open — share the code or QR with the other device';
             } else {
+                // Receiver: WebRTC handshake genuinely failed — hard reset.
+                showError(receiverErrorMsg, '⚠️ Could not connect. You may be on a restricted network.');
                 joinRoomBtn.disabled    = false;
                 joinRoomBtn.textContent = 'Join Room';
+                cleanup();
             }
-            cleanup();
         }
     }, CONNECTION_TIMEOUT);
 }
 
+/**
+ * Cancels both timers and hides the animated nudge.
+ * Called on successful connect, on leave, and on cleanup.
+ */
 function clearConnectionTimer() {
     if (connectionTimer) {
         clearTimeout(connectionTimer);
         connectionTimer = null;
     }
+    if (stillWaitingTimer) {
+        clearTimeout(stillWaitingTimer);
+        stillWaitingTimer = null;
+    }
+    stillWaitingIndicator.classList.add('hidden');
+    // Reset the waiting message text in case it was updated at the 30 s mark
+    waitingMsg.textContent = '⏳ Waiting for peer to join…';
 }
 
 // ─────────────────────────────────────────────
@@ -263,6 +367,18 @@ function cleanup() {
     dataChannel = null;
     selectedFile = null;
     resetRxState();
+
+    // Reset chat UI for both sides
+    senderChatArea.classList.add('hidden');
+    receiverChatArea.classList.add('hidden');
+    senderChatLog.innerHTML   = '';
+    receiverChatLog.innerHTML = '';
+    senderChatInput.value     = '';
+    receiverChatInput.value   = '';
+
+    // Hide leave buttons
+    senderLeaveBtn.classList.add('hidden');
+    receiverLeaveBtn.classList.add('hidden');
 }
 
 function resetRxState() {
@@ -339,6 +455,11 @@ function handleReceivedMessage(event) {
     if (typeof event.data === 'string') {
         let parsed;
         try { parsed = JSON.parse(event.data); } catch { return; }
+        if (parsed.type === 'text') {
+            appendChatMessage('them', parsed.content);
+            return;
+        }
+
         if (parsed.type !== 'meta') return;
 
         resetRxState();
@@ -400,15 +521,16 @@ function setupDataChannel(channel) {
         clearConnectionTimer();
 
         if (role === 'sender') {
-            // Delete room from Firebase now that both peers are connected.
-            // A third party can no longer join with this code.
-            deleteRoom(currentRoomCode);
-
             waitingMsg.classList.add('hidden');
             filePickerArea.classList.remove('hidden');
+            senderLeaveBtn.classList.remove('hidden');
         } else {
             receiverStatusMsg.textContent = '⏳ Waiting for sender to send a file…';
+            receiverLeaveBtn.classList.remove('hidden');
         }
+
+        // Reveal the chat panel for whichever role this peer plays
+        (role === 'sender' ? senderChatArea : receiverChatArea).classList.remove('hidden');
     };
 
     dataChannel.onclose = () => console.log('[DataChannel] Closed.');
@@ -438,6 +560,10 @@ async function startSenderSession(code) {
         createdAt: Date.now(),
     });
     console.log(`[Sender] Room created at rooms/${code}`);
+
+    // Auto-delete the room if the sender's tab closes or crashes
+    await onDisconnect(ref(db, `rooms/${code}`)).remove();
+    console.log(`[Sender] onDisconnect registered for rooms/${code}`);
 
     // Watch for receiver's answer
     const answerRef = ref(db, `rooms/${code}/answer`);
@@ -501,6 +627,9 @@ async function startReceiverSession(code) {
     console.log(`[Receiver] Answer written → rooms/${code}/answer`);
 
     listenForRemoteCandidates(`rooms/${code}/senderCandidates`);
+
+    // Watch for the room being deleted (sender left / crashed)
+    watchRoomDeletion(code);
 
     receiverStatusArea.classList.remove('hidden');
     hideError(receiverErrorMsg);
@@ -639,4 +768,131 @@ window.addEventListener('DOMContentLoaded', () => {
     if (roomParam && roomParam.length === 6) {
         roomCodeInput.value = roomParam;
     }
+});
+
+// ─────────────────────────────────────────────
+// UI — Chat: button click & Enter key
+// ─────────────────────────────────────────────
+
+[
+    [senderSendTextBtn,   senderChatInput],
+    [receiverSendTextBtn, receiverChatInput],
+].forEach(([btn, input]) => {
+    btn.addEventListener('click', sendTextMessage);
+    input.addEventListener('keydown', (e) => {
+        // Enter without Shift sends; Shift+Enter inserts a newline
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendTextMessage();
+        }
+    });
+});
+
+// ─────────────────────────────────────────────
+// ROOM DELETION WATCHER (receiver side)
+// ─────────────────────────────────────────────
+
+/**
+ * Sets up an onValue listener on the room node.
+ * When the node is deleted (sender left or crashed), shows a message and
+ * resets the receiver UI back to the initial state.
+ * The `role !== 'receiver'` guard ensures we don’t react to our own leave.
+ */
+function watchRoomDeletion(code) {
+    const roomRef = ref(db, `rooms/${code}`);
+    let seenRoom  = false;
+
+    const fn = onValue(roomRef, (snap) => {
+        if (snap.exists()) {
+            seenRoom = true;   // confirm the room existed at least once
+            return;
+        }
+        // Room is gone — only act if it previously existed AND we’re still a receiver
+        if (!seenRoom || role !== 'receiver') return;
+
+        console.log('[Receiver] Room deleted — sender left or disconnected.');
+
+        showError(receiverErrorMsg, '👋 The sender has left the room.');
+
+        cleanup();          // detaches this listener via off() + closes WebRTC
+        role            = null;
+        currentRoomCode = null;
+
+        // Reset receiver UI
+        receiverStatusArea.classList.add('hidden');
+        receiverProgressWrap.classList.add('hidden');
+        downloadArea.classList.add('hidden');
+        startOverBtn.classList.add('hidden');
+        receiverProgressBar.style.width = '0%';
+        receiverProgressPct.textContent = '0%';
+        receiverStatusMsg.textContent   = '⏳ Waiting for sender to send a file…';
+        joinRoomBtn.disabled    = false;
+        joinRoomBtn.textContent = 'Join Room';
+        roomCodeInput.value     = '';
+    });
+
+    activeListeners.push({ ref: roomRef, fn });
+}
+
+// ─────────────────────────────────────────────
+// LEAVE ROOM
+// ─────────────────────────────────────────────
+
+/**
+ * Handles "Leave Room" for both roles:
+ *  1. Detaches all Firebase listeners & closes WebRTC (via cleanup()).
+ *  2. Removes the room node from Firebase so the other peer is notified.
+ *  3. Resets all UI to the initial state.
+ *
+ * Note: cleanup() is called first so the room-deletion watcher is detached
+ * before remove() runs — this prevents the receiver from seeing its own leave.
+ */
+async function leaveRoom() {
+    const code = currentRoomCode;
+
+    cleanup();              // closes WebRTC + detaches Firebase listeners (incl. room watcher)
+    role            = null;
+    currentRoomCode = null;
+
+    if (code) await deleteRoom(code);   // also cancels onDisconnect handler server-side
+
+    // ── Sender UI reset ──────────────────────────────────
+    generateCodeBtn.disabled    = false;
+    generateCodeBtn.textContent = 'Generate Room Code';
+    codeRow.classList.add('hidden');
+    qrCodeContainer.innerHTML   = '';
+    waitingMsg.classList.add('hidden');
+    filePickerArea.classList.add('hidden');
+    senderFileInfo.classList.add('hidden');
+    senderFileInfo.innerHTML      = '';
+    sendFileBtn.classList.add('hidden');
+    senderProgressWrap.classList.add('hidden');
+    senderProgressBar.style.width = '0%';
+    senderProgressText.textContent = 'Sending…';
+    senderProgressPct.textContent  = '0%';
+    sendAnotherBtn.classList.add('hidden');
+    fileDropZone.style.pointerEvents = '';
+    fileInput.value = '';
+    hideError(senderErrorMsg);
+
+    // ── Receiver UI reset ──────────────────────────────
+    receiverStatusArea.classList.add('hidden');
+    receiverProgressWrap.classList.add('hidden');
+    downloadArea.classList.add('hidden');
+    startOverBtn.classList.add('hidden');
+    receiverProgressBar.style.width = '0%';
+    receiverProgressPct.textContent = '0%';
+    receiverStatusMsg.textContent   = '⏳ Waiting for sender to send a file…';
+    joinRoomBtn.disabled    = false;
+    joinRoomBtn.textContent = 'Join Room';
+    roomCodeInput.value     = '';
+    hideError(receiverErrorMsg);
+}
+
+// ─────────────────────────────────────────────
+// UI — Leave Room buttons
+// ─────────────────────────────────────────────
+
+[senderLeaveBtn, receiverLeaveBtn].forEach((btn) => {
+    btn.addEventListener('click', leaveRoom);
 });
